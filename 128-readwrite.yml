@@ -1,0 +1,59 @@
+cluster:                                                                                                                                             [17/165]
+  user: 'cephuser'
+  head: "ceph2admin"
+  clients: ["ceph2cl01","ceph2cl02","cephcl01","cephcl02","cephcl03","cephcl04","cephcl05","cephcl06","cephcl08","cephcl09"]
+  osds: ["ceph2osd01","ceph2osd02","ceph2osd03","ceph2osd04","ceph2osd05"]
+  mons: ["ceph2mon01","ceph2mon02","ceph2mon03"]
+  mgrs: ["ceph2mon01","ceph2mon02","ceph2mon03"]
+  #  rgws: ["rgw1","rgw2"]
+  osds_per_node: 20
+  fs: 'xfs' # ignore, used for filestore creation
+  mkfs_opts: '-f -i size=2048' # ignore, used for filestore creation
+  mount_opts: '-o inode64,noatime,logbsize=256k' #ignore, used for filestore creation
+  conf_file: '/etc/ceph/ceph.conf'
+  iterations: 1
+  use_existing: True
+  clusterid: 'ceph'
+  tmp_dir: '/home/cephuser/cbt'
+  pool_profiles:
+    replication2:
+      pg_size: 4096
+      pgp_size: 4096
+      replication: 2
+    ec22:
+      pg_size: 4096
+      pgp_size: 4096
+      replication: 'erasure'
+      erasure_profile: 'myprofile'
+      ec_overwrites: True
+
+client_endpoints:
+  fiotest:
+    driver: 'librbd'
+    use_existing_pool: False # set to true after first run
+    endpoints_per_client: 20
+    endpoint_size: 102400
+    data_pool_profile: 'replication2'
+    pool_profile: 'replication2'
+
+benchmarks:
+  fio:
+    client_endpoints: 'fiotest'
+    prefill: True # set to false after first run
+ ramp: 300
+    time: 600
+    time_based: True
+    norandommap: True
+    size: 102400
+    mode: ['read','write']
+    rwmixread: 70
+    op_size: [131072] #[524288,1048576]
+    procs_per_endpoint: [1]
+    iodepth: [32]
+    cmd_path: '/usr/bin/fio'
+    log_avg_msec: 100
+monitoring_profiles:
+  dstat:
+    nodes:
+     - osds
+     - clients
