@@ -1,0 +1,63 @@
+---
+# Execute at mon nodes
+- hosts: mons
+  become: true
+  become_method: sudo
+  tasks:
+    - name: "Stop docker services at monitor nodes"
+      service:
+        name:  podman
+        state: stopped
+
+# Execute at osd nodes
+- hosts: osds
+  become: true
+  become_method: sudo
+  vars:
+    disks:
+      - nvme1n1
+      - nvme2n1
+      - nvme3n1
+      - nvme4n1
+      - nvme5n1
+      - nvme6n1
+      - nvme7n1
+      - nvme8n1
+      - nvme9n1
+      - nvme0n1
+tasks:
+    - name: "Stop docker services at monitor nodes"
+      service:
+        name: podman
+        state: stopped
+    - name: "Delete all partitions on all given list of disks"
+      parted:
+        device: "/dev/{{ item }}"
+        unit: MiB
+      register: info
+      loop: "{{ disks }}"
+
+# Run to all ceph nodes
+- hosts: all
+  become: true
+  become_method: sudo
+  tasks:
+    - name: "Delete directory /etc/ceph folder"
+      #shell: rm -rf /var/lib/ceph
+      file:
+        path: /etc/ceph/
+        state: absent
+    - name: "Delete directory /var/lib/ceph folder"
+      file:
+        path: /var/lib/ceph/
+        state: absent
+    - name: "Ceph files to be deleted at /etc/systemd/system/multi-user.target.wants/ceph*"
+      find:
+        path: /etc/systemd/system/multi-user.target.wants
+        patterns: "ceph*"
+      register: files_to_delete
+    - name: "Ansible will remove file all ceph file wildcard"
+      file:
+        path: "{{ item.path }}"
+        state: absent
+      with_items: "{{ files_to_delete.files }}"
