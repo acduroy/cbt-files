@@ -1,0 +1,204 @@
+
+Step 1. Prepare all Nodes - ceph-ansible, OSD, MON, MGR. MDS
+
+# On all cephnodes, add hostname with IP address to DNS server or update /etc/hosts on all servers
+sudo tee -a /etc/hosts<<EOF
+# Ceph Nodes
+10.3.216.145    cephadmin
+10.3.216.222    cephgw1
+10.3.216.223    cephgw2
+10.3.216.220    cephigw1
+10.3.216.217    cephigw2
+10.3.216.218    cephmon1
+10.3.216.160    cephmon2
+10.3.216.219    cephmon3
+10.3.216.161    cephosd1
+10.3.216.221    cephosd2
+10.3.216.226    cephosd3
+10.3.216.225    cephosd4
+EOF
+
+# install basic packages
+# Convert CentOS Linux to CentOS Stream
+sudo dnf --disablerepo '*' --enablerepo=extras swap centos-linux-repos centos-stream-repos -y
+sudo dnf distro-sync -y
+
+# Reboot each server after upgrade.
+sudo dnf -y update && sudo reboot
+sudo dnf install git vim bash-completion tmux -y
+
+Step 2. Step 2: Prepare Ceph Admin Node
+#  Add EPEL repository
+sudo dnf -y install https://dl.fedoraproject.org/pub/epel/epel-release-latest-8.noarch.rpm
+sudo dnf config-manager --set-enabled powertools
+
+# Install Git
+sudo yum install git vim bash-completion
+
+# Clone Ceph Ansible repository:
+git clone https://github.com/ceph/ceph-ansible.git
+
+# Choose ceph-ansible branch. In this case, Ceph octopus version.
+cd ceph-ansible
+git checkout stable-5.0
+
+# Install Python pip.
+sudo yum install python3-pip -y
+
+# Use pip and the provided requirements.txt to install Ansible and other needed Python libraries:
+sudo pip3 install -r requirements.txt  
+
+OR use this syntax if there is error inside ceph-ansible folder
+
+sudo python3 -m pip install -r requirements.txt
+
+
+
+Note:
+******
+IF seeing this error during install - Command "python setup.py egg_info" failed with error code 1 in /tmp/pip-build-m668yjb5/cryptography/
+Run the following commands:
+sudo pip3 install setuptools-rust
+sudo pip3 install --upgrade pip
+
+Then re-run 
+sudo pip3 install -r requirements.txt
+
+# Ensure /usr/local/bin path is added to PATH.
+echo "PATH=\$PATH:/usr/local/bin" >>~/.bashrc
+source ~/.bashrc
+
+# Confirm Ansible version installed.
+ansible --version
+
+Sample Output:
+----------------
+ansible 2.9.27
+  config file = None
+  configured module search path = ['/home/cephuser/.ansible/plugins/modules', '/usr/share/ansible/plugins/modules']
+  ansible python module location = /usr/local/lib/python3.6/site-packages/ansible
+  executable location = /usr/local/bin/ansible
+  python version = 3.6.8 (default, Mar 25 2022, 11:15:52) [GCC 8.5.0 20210514 (Red Hat 8.5.0-10)]
+----------------
+
+# Copy SSH Public Key to all nodes
+for host in cephmon01 cephmon02 cephmon03 cephosd01 cephosd02 cephosd03; do
+ ssh-copy-id root@$host
+done
+
+# Create ssh configuration file on the Admin node for all storage nodes.
+cat << EOF >> /home/$USER/.ssh/config
+Host cephadmin
+  Hostname 10.3.216.145
+  User cloud-user
+Host cephgw1
+  Hostname 10.3.216.222
+  User cloud-user
+Host cephgw2
+  Hostname 10.3.216.223
+  User cloud-user
+Host cephigw1
+  Hostname 10.3.216.220
+  User cloud-user
+Host cephigw2
+  Hostname 10.3.216.217
+  User cloud-user
+Host cephmon1
+  Hostname 10.3.216.218
+  User cloud-user
+Host cephmon2
+  Hostname 10.3.216.160
+  User cloud-user
+Host cephmon3
+  Hostname 10.3.216.219
+  User cloud-user
+Host cephosd1
+  Hostname 10.3.216.161
+  User cloud-user
+Host cephosd2
+  Hostname 10.3.216.221
+  User cloud-user
+Host cephosd3
+  Hostname 10.3.216.226
+  User cloud-user
+Host cephosd4
+  Hostname 10.3.216.225
+  User cloud-user
+EOF
+
+# When not using root for ssh, enable the remote user on all storage the nodes to perform passwordless sudo.
+echo -e 'Defaults:user !requiretty\nusername ALL = (root) NOPASSWD:ALL' | sudo tee /etc/sudoers.d/ceph
+sudo chmod 440 /etc/sudoers.d/ceph
+
+# Create a hosts file under folder ceph-ansible
+[mons]
+ceph2mon01
+ceph2mon02
+ceph2mon03
+
+[mgrs]
+ceph2mon01
+ceph2mon02
+ceph2mon03
+
+[osds]
+ceph2osd01
+ceph2osd02
+ceph2osd03
+ceph2osd04
+ceph2osd05
+
+[grafana-server]
+ceph2admin
+
+[rgws]
+ceph2gw01
+ceph2gw02
+
+[rgwloadbalancers]
+ceph2admin
+
+[mdss]
+ceph2gw01
+ceph2gw02
+
+[clients]
+
+[iscsigws]
+ceph2gw01
+ceph2gw02
+
+
+# Configure Ansible Inventory and Playbook
+
+
+
+Failues during ceph-ansible deployment:
+#1. TASK [ceph-container-common : get ceph version]
+stderr: |-
+    time="2021-11-21T14:46:15Z" level=warning msg="Can't read link \"/var/lib/containers/storage/overlay/l/DTI2ILFZPZCFDXYHELLQIH25OL\" because it does not exist. A sto
+rage corruption might have occurred, attempting to recreate the missing symlinks. It might be best wipe the storage to avoid further errors due to storage corruption."
+    Error: readlink /var/lib/containers/storage/overlay/l/DTI2ILFZPZCFDXYHELLQIH25OL: no such file or directory
+
+cephgw1                    : ok=54   changed=2    unreachable=0    failed=1    skipped=199  rescued=0    ignored=0
+cephgw2                    : ok=54   changed=2    unreachable=0    failed=1    skipped=199  rescued=0    ignored=0
+cephigw1                   : ok=52   changed=2    unreachable=0    failed=1    skipped=206  rescued=0    ignored=0
+cephigw2                   : ok=52   changed=2    unreachable=0    failed=1    skipped=206  rescued=0    ignored=0
+cephmon3                   : ok=56   changed=2    unreachable=0    failed=1    skipped=201  rescued=0    ignored=0
+cephosd3                   : ok=55   changed=2    unreachable=0    failed=1    skipped=213  rescued=0    ignored=0
+
+#2. TASK [ceph-mds : systemd start mds container] **************************************************************************************************************************
+Sunday 21 November 2021  16:52:07 +0000 (0:00:01.035)       0:04:23.696 *******
+fatal: [cephgw1]: FAILED! => changed=false
+  msg: |-
+    Unable to start service ceph-mds@cephgw1: Job for ceph-mds@cephgw1.service failed because the control process exited with error code.
+    See "systemctl status ceph-mds@cephgw1.service" and "journalctl -xe" for details.
+fatal: [cephgw2]: FAILED! => changed=false
+  msg: |-
+    Unable to start service ceph-mds@cephgw2: Job for ceph-mds@cephgw2.service failed because the control process exited with error code.
+    See "systemctl status ceph-mds@cephgw2.service" and "journalctl -xe" for details.
+
+#3. Error message " mons are allowing insecure global_id reclaim" after ceph installation
+Fix resolution:
+1. sudo ceph config set mon mon_warn_on_insecure_global_id_reclaim false
+2. sudo ceph config set mon mon_warn_on_insecure_global_id_reclaim_allowed false
