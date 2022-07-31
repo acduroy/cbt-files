@@ -1,0 +1,56 @@
+sudo dnf update -y
+sudo dnf install vim bash-completion tmux
+sudo dnf install git -y
+sudo dnf -y install https://dl.fedoraproject.org/pub/epel/epel-release-latest-8.noarch.rpm
+sudo dnf config-manager --set-enabled powertools
+git clone https://github.com/ceph/ceph-ansible.git
+cd ceph-ansible
+git checkout stable-5.0
+sudo yum install python3-pip
+sudo pip3 install -r requirements.txt
+ansible --version
+
+# Create an inventory hosts under ceph-ansible folder
+cat /home/cephuser/ceph-ansible/hosts
+[mons]
+ceph5-mon1
+ceph5-mon2
+ceph5-mon3
+
+[mgrs]
+ceph5-mon1
+ceph5-mon2
+ceph5-mon3
+
+[osds]
+ceph5-osd1
+ceph5-osd2
+ceph5-osd3
+ceph5-osd4
+
+[grafana-server]
+ceph5-admin
+
+[rgws]
+ceph5-gw1
+ceph5-gw2
+
+[rgwloadbalancers]
+ceph5-admin
+
+[mdss]
+ceph5-gw1
+ceph5-gw2
+
+[clients]
+
+[iscsigws]
+ceph5-gw1
+ceph5-gw2
+
+# Add ssh-public-key of admin node to itself in the authorized_keys file
+cat ~/.ssh/id_rsa.pub | ssh USER@HOST "mkdir -p ~/.ssh && cat >> ~/.ssh/authorized_keys"
+
+# Change the mode of the authorized_keys file
+chmod 644 .ssh/authorized_keys
+
