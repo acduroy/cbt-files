@@ -1,0 +1,211 @@
+
+Step 1. Build and install pdsh from source:
+For Ubuntu Host:
+sudo yum update -y
+
+For CentOS8 Host:
+To migrate from CentOS 8 to CentOS Stream 8, run the following commands:
+sudo dnf --disablerepo '*' --enablerepo=extras swap centos-linux-repos centos-stream-repos -y
+sudo dnf distro-sync -y
+
+# Install git
+sudo yum install git -y
+
+# Install gcc compiler:
+sudo  yum groupinstall "Development Tools" -y
+
+# Download latest pdsh source (say from https://code.google.com/archive/p/pdsh/downloads)
+git clone https://github.com/chaos/pdsh.git
+
+# Checkout the pdsh version 2.31
+cd pdsh
+git checkout pdsh-2.31
+
+# Configure and Install pdsh
+sudo ./configure --without-rsh --with-ssh #(For configure ssh)
+sudo make
+sudo make install
+
+# Create symbolic link 
+sudo ln -s /usr/local/bin/pdsh /bin/pdsh 
+
+# Verify pdsh version
+pdsh -V
+
+# Install numpy on Admin Host to fix error when running parse-new-cbt.py
+# Ref: https://centos.pkgs.org/8-stream/centos-appstream-x86_64/python3-numpy-1.14.3-9.el8.x86_64.rpm.html
+
+sudo dnf install python3-numpy
+
+# If OS is RHEL8, you might encounter this issue. By default, gcc compiler is not installed., thus need to install it.
+Error
+sudo ./configure --without-rsh --with-ssh
+checking metadata... ./configure: line 1549: perl: command not found
+./configure: line 1568: perl: command not found
+./configure: line 1587: perl: command not found
+./configure: line 1617: perl: command not found
+./configure: line 1636: perl: command not found
+./configure: line 1655: perl: command not found
+./configure: line 1665: perl: command not found
+./configure: line 1675: perl: command not found
+yes
+checking build system type... x86_64-redhat-linux-gnu
+checking host system type... x86_64-redhat-linux-gnu
+checking target system type... x86_64-redhat-linux-gnu
+checking for a BSD-compatible install... /bin/install -c
+checking whether build environment is sane... yes
+checking for gawk... gawk
+checking whether make sets $(MAKE)... yes
+checking whether to enable maintainer-specific portions of Makefiles... no
+checking for gcc... no
+checking for cc... no
+checking for cc... no
+checking for cl... no
+configure: error: no acceptable C compiler found in $PATH
+See `config.log' for more details.
+
+**********************************************************************************
+As a fix:
+Install gcc compiler:
+sudo  yum groupinstall "Development Tools"
+**********************************************************************************
+
+# Step 2. Install FIO
+sudo yum install -y fio
+
+Step 3. Specifies the maximum number of concurrent unauthenticated connections to the SSH daemon. 
+sudo cp /etc/ssh/sshd_config /etc/ssh/sshd_config.bak
+echo 	
+MaxStartups 100:30:1024
+
+# Restart  sshd.service
+sudo systemctl restart sshd.service
+
+Step 4. Install client ceph packages
+sudo dnf -y install centos-release-ceph-octopus
+# sudo dnf -y install ceph (optional, execute if needed)
+sudo yum install ceph-common -y
+
+Step 5. Modify /etc/hosts
+
+172.17.43.200  cephadmin
+172.17.43.201  cephosd01
+172.17.43.242  cephosd02
+172.17.43.250  cephosd03
+172.17.43.60   cephosd04
+172.17.43.170  cephmon01
+172.17.43.150  cephmon02
+172.17.43.149  cephmon03
+172.17.43.132  cephgw01
+172.17.43.228  cephgw02
+
+# Client nodes
+172.17.43.138   cl1
+172.17.43.100   cl2
+172.17.43.101   cl3
+10.0.1.113      cephcl04
+10.0.1.134      cephcl05
+10.0.1.132      cephcl06
+10.0.1.136      cephcl07
+10.0.1.130      cephcl01
+10.0.1.110      cephcl10
+10.0.1.111      cephcl03
+10.0.1.112      cephcl02
+10.0.1.120      cephcl09
+10.0.1.123      cephcl08
+
+# Transfer ceph client keys
+mkdir ceph-client-keys
+sudo scp cephmon01:/etc/ceph/ceph.conf /etc/ceph/
+sudo scp cephmon01:/etc/ceph/ceph.client.admin.keyring /etc/ceph/
+
+# Change file mode attributes of ceph client keyring
+sudo chmod 644 /etc/ceph/ceph.client.admin.keyring
+
+# Verify ceph cluster
+ceph -s
+
+Step 6. Create password less account for cephuser (must be in root)
+echo "cephuser ALL=(ALL) NOPASSWD:ALL" | sudo tee /etc/sudoers.d/cephuser
+chmod 644 /etc/sudoers.d/cephuser
+
+Step 7. copy headnode public ssh-key to the client node
+ssh-copy-id -i /home/cephuser/.ssh/id_rsa.pub
+
+Step 8. Change file mode of /etc/sudoers'd/cephuser (must be in root)
+chmod 644 /etc/sudoers.d/cephuser
+
+*********************************************************************************
+Various issues encountered during running CBT testing
+*********************************************************************************
+Error 1
+ ./cbt.py  --archive=/home/cephuser/cbt/archive/10-Intelp5510/4krandom 1-4k_RR-RW-70MRW-200CL-1to32-test_cbt¦··································
+.yaml 2>&1 | tee /home/cephuser/cbt/archive/10-Intelp5510/4krandom/4k-rand-2r-1.log
+
+
+rpdcp -f 10 -R ssh -w cephuser@cephmon01,cephuser@cephosd01,cephuser@cephmon03,cephuser@cephosd03,cephuser@cephosd04,cephuser@cephmon02,cephuser@cephosd02 -r /home/cephuser/test/Fio/* /tmp/cbt/jan19-ravi-client7/test/
+
+Ubuntu 20.04
+cephuser@cephcl03:~$ pdsh -V
+pdsh-2.31 (+debug)
+cephuser@cephcl03:~$ which pdsh
+/usr/bin/pdsh
+
+Rhel 8.5
+[cephuser@cephcl01 ~]$ pdsh -V
+pdsh-2.31
+[cephuser@cephcl01 ~]$ which pdsh
+/usr/local/bin/pdsh
+[cephuser@cephcl07 ~]$ which pdsh
+/usr/local/bin/pdsh
+[cephuser@cephcl02 ~]$ which pdsh
+/usr/local/bin/pdsh
+
+
+Error2:
+
+Error3:
+---------------------------------------
+15:40:29 - DEBUG    - cbt      - CheckedPopen continue_if_error=False, shell=False args=rpdcp -f 10 -R ssh -w cephuser@cephcl07,cephuser@cephmon03,cephuser@cephmon01,cephuser@cephmon02,cephuser@cephosd04,cephuser@cephosd01,cephuser@cephcl03,cephuser@cephosd02,cephuser@cephosd03 -r /home/cephuser/cbt/00000000/Fio/* /tmp/cbt/jan19/2x-client/results/00000000/id-45f3ccb1
+15:40:29 - INFO     - cbt      - Convert results to json format.
+15:40:29 - DEBUG    - cbt      - Nodes : cephuser@cephcl07,cephuser@cephcl03
+15:40:29 - ERROR    - cbt      - During tests
+Traceback (most recent call last):
+  File "./cbt.py", line 75, in main
+    b.run()
+  File "/home/cephuser/cbt/benchmark/fio.py", line 217, in run
+    self.analyze(self.out_dir)
+  File "/home/cephuser/cbt/benchmark/fio.py", line 230, in analyze
+    with open(out_file) as fd:
+FileNotFoundError: [Errno 2] No such file or directory: '/tmp/cbt/jan19/2x-client/results/00000000/id-45f3ccb1/output.10.cephcl07'
+cleaning remote dir /home/cephuser/cbt/00000000/Fio
+cephcl07: cephcl07
+cephcl03: cephcl03
+
+['cephcl07', 'cephcl03']
+---------------------------------------
+
+Error4:
+---------------------------------------
+20:37:48 - ERROR    - cbt      - During tests
+Traceback (most recent call last):
+  File "./cbt.py", line 75, in main
+    b.run()
+  File "/home/cephuser/cbt/benchmark/fio.py", line 216, in run
+    common.sync_files('%s/*' % self.run_dir, self.out_dir)
+  File "/home/cephuser/cbt/common.py", line 235, in sync_files
+    continue_if_error=False).communicate()
+  File "/home/cephuser/cbt/common.py", line 56, in communicate
+    'stderr:', stderrdata]))
+Exception: checked_Popen args=pdsh -S -f 10 -R ssh -w cephuser@cephmon01,cephuser@cephmon02,cephuser@cephmon03,cephuser@cephosd03,cephuser@cephcl07,cephuser@cephcl03,cephuser@cephosd01,cephuser@cephcl04,cephuser@cephosd02,cephuser@cephosd04 sudo chown -R cephuser.cephuser /home/cephuser/cbt/00000000/Fio/* continue_if_error=False rtncode=1
+stdout:
+
+stderr:
+cephcl04: sudo: a terminal is required to read the password; either use the -S option to read from standard input or configure an askpass helper
+pdsh@cephadmin: cephcl04: ssh exited with exit code 1
+
+cleaning remote dir /home/cephuser/cbt/00000000/Fio
+cephcl03: cephcl03
+cephcl04: cephcl04
+cephcl07: cephcl07
+---------------------------------------
